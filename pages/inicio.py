@@ -2,8 +2,7 @@ import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, State, dcc, html, Dash, callback
-import pandas
-import numpy
+import numpy as np
 import plotly.graph_objs as go
 
 dash.register_page(__name__, path="/")
@@ -46,38 +45,43 @@ layout = html.Div(children=[
             html.Div(
                    [
                    dbc.Label("Ingrese la dirección del inmueble"),
-                   dbc.Input(id="input-dirección", placeholder=''),
+                   dbc.Input(id="input-dirección", placeholder='', persistence=True, persistence_type="session"),
                    ], style=style
                    ),
             html.Div([
                     dbc.Label("Ingrese la localidad del inmueble"),
                     dcc.Dropdown(options=localidad,
                                  placeholder="",
-                                 id="dropdown-localidad"),
+                                 id="dropdown-localidad",
+                                 persistence=True, persistence_type="session"),
                     ],
                     style=style
                     ),
             html.Div([
                 dbc.Label("Seleccione el estrato socioeconómico"),
-                dcc.Dropdown(options=[1, 2, 3, 4, 5, 6], id="dropdown-estrato", placeholder="seleccione...")
+                dcc.Dropdown(options=[1, 2, 3, 4, 5, 6], id="dropdown-estrato", placeholder="seleccione...",
+                             persistence=True, persistence_type="session")
                     ],
                     style=style
            ),
             html.Div([
                dbc.Label("Introduzca el número de habitaciones"),
-               dbc.Input(id="input-habitaciones", placeholder="1", type="number", min=1)
+               dbc.Input(id="input-habitaciones", placeholder="1", type="number", min=1,
+                         persistence=True, persistence_type="session")
                 ],
                style=style
             ),
             html.Div([
                dbc.Label("Introduzca el número de baños"),
-               dbc.Input(id="input-baños", placeholder="1", type="number", min=1)
+               dbc.Input(id="input-baños", placeholder="1", type="number", min=1,
+                         persistence=True, persistence_type="session")
                 ],
                style=style
             ),
             html.Div([
                dbc.Label("Introduzca el área en metros cuadrados"),
-               dbc.Input(id="input-m2", placeholder="25", type="number", min=10)
+               dbc.Input(id="input-m2", placeholder="25", type="number", min=10,
+                         persistence=True, persistence_type="session")
                 ],
                style=style
             ),
@@ -85,11 +89,10 @@ layout = html.Div(children=[
                 dbc.Label("¿Con qué más cuenta el inmueble?"),
                 dbc.Checklist(
                     options=[
-                        {'label': 'Parqueadero', 'value': 'parqueadero'},
-                        {'label': 'Jardín', 'value': 'Jardín'},
-                        {'label': 'Parque recreativo', 'value': 'Parque recreativo'},
-                        {'label': 'Gimnasio', 'value': 'Gimnasio'},
-                    ], id='características-adicionales'
+                        {'label': 'Arriendo', 'value': 'Arriendo'},
+                        {'label': 'Compra/Venta', 'value': 'Compra/Venta'},
+                    ], id='características-adicionales',
+                    persistence=True, persistence_type="session"
                 )
                 ],
                 style=style
@@ -97,7 +100,11 @@ layout = html.Div(children=[
         ], align="start", width=4),
         dbc.Col([
             html.Div([
-                dcc.Graph(figure=figure)])
+                dcc.Graph(figure=figure)]),
+            html.Hr(),
+            html.Div([dbc.Button("Enviar formulario", size="lg", className="me-1",
+                                 id="boton_state", n_clicks=0, color="danger")]),
+            html.Div(id="alerta", children=[], style=style)
         ], style=style, width=8)
     ])
 ])
@@ -105,18 +112,39 @@ layout = html.Div(children=[
 
 @callback(
     Output("intermediate-value", "data"),
-    [Input("dropdown-localidad", "value"),
-     Input("dropdown-estrato", "value"),
-     Input("input-habitaciones", "value"),
-     Input("input-baños", "value"),
-     Input("input-m2", "value")]
+    Input("boton_state", "n_clicks"),
+    [State("dropdown-localidad", "value"),
+     State("dropdown-estrato", "value"),
+     State("input-habitaciones", "value"),
+     State("input-baños", "value"),
+     State("input-m2", "value")]
 )
-def diccionario_prediccion(localidad, estrato, habitaciones, baños, m2):
-    data = pd.DataFrame.from_dict({"baños": [baños],
-                     "cuartos":[habitaciones],
-                     "localidad": [localidad],
-                     "estrato": [estrato],
-                     "área": [m2]
-                     })
-    data_json = data.to_json(orient="split")
-    return data_json
+def diccionario_prediccion(n_clicks, localidad, estrato, habitaciones, baños, m2):
+    if n_clicks > 0:
+        data = pd.DataFrame.from_dict({"baños": [baños],
+                         "cuartos":[habitaciones],
+                         "localidad": [localidad],
+                         "estrato": [estrato],
+                         "área": [m2]
+                         })
+        if not data.isnull().values.any():
+            data_json = data.to_json(orient="split")
+            return data_json
+
+
+@callback(
+    Output("alerta", "children"),
+    [Input("boton_state", "n_clicks"),
+     Input("intermediate-value", "data")]
+)
+def crear_alerta(n_clicks, data):
+    df = pd.read_json(data, orient="split")
+    check_NaN = df.isnull().values.any()
+    if n_clicks > 0:
+        if check_NaN:
+            children = dbc.Alert("Por favor diligencie todos los campos para ver su resultado", color="primary")
+            return children
+        else:
+            children = dbc.Alert("Perfecto! Por favor continúe a la página de resultados", color="success")
+            return children
+
